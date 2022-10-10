@@ -11,7 +11,6 @@ Sentry.init({
     dsn: config.sentryDSN,
     tracesSampleRate: 1.0
 })
-
 // Start express server
 const morgan = require('morgan')
 const express = require('express')
@@ -19,6 +18,8 @@ const app = express()
 app.use(express.json())
 app.use(morgan('dev'))
 app.listen(config.port, () => console.log(`Pronote Notifications API server listening on port ::${config.port}::`))
+
+const { db } = require('./services/models')
 
 const DatabaseService = require('./services/database')
 const PronoteService = require('./services/pronote')
@@ -29,9 +30,11 @@ const database = new DatabaseService()
 const pronote = new PronoteService()
 const firebase = new FirebaseService()
 
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const synchronize = async (studentName) => {
+    await db.sync()
     const users = await database.fetchUsers()
     const usersCaches = await database.fetchUsersCache()
     const usersTokens = await database.fetchFCMTokens()

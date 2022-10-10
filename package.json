@@ -17,7 +17,9 @@
     "morgan": "^1.10.0",
     "pg": "^8.4.1",
     "pronote-api": "EduWireApps/pronote-api",
-    "semver-parser": "^3.0.5"
+    "semver-parser": "^3.0.5",
+    "sequelize": "^6.24.0",
+    "sqlite3": "^5.1.2"
   },
   "devDependencies": {
     "eslint": "^7.25.0",

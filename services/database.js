@@ -1,6 +1,6 @@
 const config = require('../config.json')
-const { Pool } = require('pg')
-
+const { Users, UsersCaches, UsersTokens, UsersLogs, Notifications } = require('./models');
+const { Sequelize, Op } = require('sequelize');
 const formatUser = (row) => ({
     pronoteURL: row.pronote_url,
     pronoteUsername: row.pronote_username,
@@ -23,267 +23,312 @@ const formatFCMToken = (row) => ({
 })
 
 class DatabaseService {
-    constructor () {
-        this.pool = new Pool(config.database)
-            .on('connect', () => {
-                console.log('Connected to PostgreSQL database')
-            })
-            .on('error', (e) => console.error(e))
-    }
 
-    query (query, ...parameters) {
+
+
+    query(query, ...parameters) {
         return new Promise((resolve) => {
-            this.pool.query(query, parameters, (error, res) => {
-                if (!error) resolve(res)
-                else console.error(error)
+            db.query(query, parameters).then((result) => {
+                resolve(result)
             })
         })
     }
 
-    fetchFCMToken (fcmToken) {
+    fetchFCMToken(fcmToken) {
         return new Promise((resolve) => {
-            this.query(`
-                SELECT * FROM users_tokens
-                WHERE fcm_token = $1;
-            `, fcmToken).then(({ rowCount, rows }) => {
-                resolve(rowCount > 0 ? formatFCMToken(rows[0]) : null)
+            UsersTokens.findOne({
+                where: {
+                    fcm_token: fcmToken
+                }
+            }).then((row) => {
+                resolve(formatFCMToken(row))
+            }
+            )
+
+        })
+    }
+
+    fetchUser(pronoteUsername, pronoteURL) {
+        return new Promise((resolve) => {
+            Users.findOne({
+                where: {
+                    pronote_username: pronoteUsername,
+                    pronote_url: pronoteURL
+                }
+            }).then((row) => {
+                resolve(formatUser(row))
             })
         })
     }
 
-    fetchUser (pronoteUsername, pronoteURL) {
+    deleteUser({ pronoteUsername, pronoteURL }) {
         return new Promise((resolve) => {
-            this.query(`
-                SELECT * FROM users
-                WHERE pronote_username = $1
-                AND pronote_url = $2;
-            `, pronoteUsername, pronoteURL).then(({ rows, rowCount }) => {
-                resolve(rowCount > 0 ? formatUser(rows[0]) : null)
-            })
-        })
-    }
-    
-    deleteUser ({ pronoteUsername, pronoteURL }) {
-        return new Promise((resolve) => {
-            this.query(`
-                DELETE FROM users
-                WHERE pronote_username = $1
-                AND pronote_url = $2;
-            `, pronoteUsername, pronoteURL).then(() => {
+            Users.destroy({
+                where: {
+                    pronote_username: pronoteUsername,
+                    pronote_url: pronoteURL
+                }
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    fetchUsers () {
+    fetchUsers() {
         return new Promise((resolve) => {
-            this.query(`
-                SELECT * FROM users;
-            `).then(({ rows }) => {
-                resolve(rows.map((row) => formatUser(row)))
-            })
+            Users.findAll().then((rows) => {
+                resolve(rows.map(formatUser))
+            }
+            )
         })
     }
 
-    fetchUsersCache () {
+    fetchUsersCache() {
         return new Promise((resolve) => {
-            this.query(`
-                SELECT * FROM users_caches;
-            `).then(({ rows }) => {
+            UsersCaches.findAll().then((rows) => {
                 resolve(rows.map((row) => ({
                     pronoteURL: row.pronote_url,
                     pronoteUsername: row.pronote_username,
                     homeworksCache: row.homeworks_cache,
-                    marksCache: row.marks_cache
+                    marksCache: row.marks_cache,
+                    lastUpdateAt: row.last_update_at
                 })))
+            }
+            )
+        })
+    }
+
+    fetchFCMTokens() {
+        return new Promise((resolve) => {
+            UsersTokens.findAll().then((rows) => {
+                resolve(rows.map(formatFCMToken))
             })
         })
     }
 
-    fetchFCMTokens () {
+    fetchUserNotifications(pronoteUsername, pronoteURL) {
         return new Promise((resolve) => {
-            this.query(`
-                SELECT * FROM users_tokens;
-            `).then(({ rows }) => {
-                resolve(rows.map((row) => formatFCMToken(row)))
-            })
-        })
-    }
-
-    fetchUserNotifications (pronoteUsername, pronoteURL) {
-        return new Promise((resolve) => {
-            this.query(`
-                SELECT * FROM notifications
-                WHERE pronote_username = $1
-                AND pronote_url = $2;
-            `, pronoteUsername, pronoteURL).then(({ rows }) => {
+            Notifications.findAll({
+                where: {
+                    pronote_username: pronoteUsername,
+                    pronote_url: pronoteURL
+                }
+            }).then((rows) => {
                 resolve(rows.map((row) => ({
+                    id: row.id,
                     pronoteURL: row.pronote_url,
                     pronoteUsername: row.pronote_username,
-                    createdAt: row.created_at,
-                    readAt: row.read_at,
-                    sentAt: row.sent_at,
-                    body: row.body,
                     title: row.title,
-                    type: row.type
+                    body: row.body,
+                    type: row.type,
+                    createdAt: row.created_at
                 })))
             })
         })
     }
 
-    markLastActiveAt (token, date) {
+    markLastActiveAt(token, date) {
         return new Promise((resolve) => {
-            this.query(`
-                UPDATE users_tokens
-                SET last_active_at = $1
-                WHERE fcm_token = $2;
-            `, date.toISOString(), token).then(() => {
+            UsersTokens.update({
+                last_active_at: date
+            }, {
+                where: {
+                    fcm_token: token
+                }
+            }).then(() => {
+                resolve()
+            }
+            )
+        })
+    }
+
+    markLastSuccessAt(token, date) {
+        return new Promise((resolve) => {
+            UsersTokens.update({
+                last_success_at: date
+            }, {
+                where: {
+                    fcm_token: token
+                }
+            }).then(() => {
+                resolve()
+            }
+            )
+        })
+    }
+
+    updateUserCache({ pronoteUsername, pronoteURL }, { homeworksCache, marksCache }) {
+        return new Promise((resolve) => {
+            // insert or update
+            UsersCaches.upsert({
+                pronote_url: pronoteURL,
+                pronote_username: pronoteUsername,
+                homeworks_cache: homeworksCache,
+                marks_cache: marksCache,
+                last_update_at: new Date()
+            }).then(() => {
                 resolve()
             })
         })
     }
 
-    markLastSuccessAt (token, date) {
+    invalidateUserPassword({ pronoteUsername, pronoteURL }, invalidate = true) {
         return new Promise((resolve) => {
-            this.query(`
-                UPDATE users_tokens
-                SET last_success_at = $1
-                WHERE fcm_token = $2;
-            `, date.toISOString(), token).then(() => {
+            Users.update({
+                password_invalidated: invalidate
+            }, {
+                where: {
+                    pronote_username: pronoteUsername,
+                    pronote_url: pronoteURL
+                }
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    updateUserCache ({ pronoteUsername, pronoteURL }, { homeworksCache, marksCache }) {
+    updateUserPassword({ pronoteUsername, pronoteURL, newPassword }) {
         return new Promise((resolve) => {
-            const date = new Date().toISOString()
-            this.query(`
-                INSERT INTO users_caches
-                    (pronote_username, pronote_url, homeworks_cache, marks_cache, last_update_at) VALUES
-                    ($1, $2, $3, $4, $5)
-                ON CONFLICT ON CONSTRAINT users_caches_pkey DO
-                    UPDATE SET homeworks_cache = excluded.homeworks_cache, marks_cache = excluded.marks_cache, last_update_at = excluded.last_update_at;
-            `, pronoteUsername, pronoteURL, JSON.stringify(homeworksCache), JSON.stringify(marksCache), date).then(() => {
+            Users.update({
+                pronote_password: newPassword,
+                password_invalidated: false
+            }, {
+                where: {
+                    pronote_username: pronoteUsername,
+                    pronote_url: pronoteURL
+                }
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    invalidateUserPassword ({ pronoteUsername, pronoteURL }, invalidate = true) {
+    createUser({ pronoteUsername, pronotePassword, pronoteURL, pronoteCAS, fullName, studentClass, establishment }) {
         return new Promise((resolve) => {
-            this.query(`
-                UPDATE users
-                SET password_invalidated = $1
-                WHERE pronote_username = $2
-                AND pronote_url = $3;
-            `, invalidate, pronoteUsername, pronoteURL).then(() => {
+            Users.upsert({
+                pronote_url: pronoteURL,
+                pronote_username: pronoteUsername,
+                pronote_password: pronotePassword,
+                pronote_cas: pronoteCAS,
+                full_name: fullName,
+                student_class: studentClass,
+                establishment: establishment,
+                password_invalidated: false
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    updateUserPassword ({ pronoteUsername, pronoteURL, newPassword }) {
-        return new Promise((resolve) => {
-            this.query(`
-                UPDATE users
-                SET pronote_password = $1
-                WHERE pronote_username = $2
-                AND pronote_url = $3;
-            `, newPassword, pronoteUsername, pronoteURL).then(() => {
-                resolve()
-            })
-        })
-    }
-
-    createUser ({ pronoteUsername, pronotePassword, pronoteURL, pronoteCAS, fullName, studentClass, establishment }) {
-        return new Promise((resolve) => {
-            this.query(`
-                INSERT INTO users
-                (pronote_username, pronote_password, pronote_url, pronote_cas, full_name, student_class, establishment, created_at) VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8);
-            `, pronoteUsername, pronotePassword, pronoteURL, pronoteCAS, fullName, studentClass, establishment, new Date().toISOString()).then(() => {
-                resolve()
-            })
-        })
-    }
-
-    updateToken (token, data) {
+    updateToken(token, data) {
         return new Promise((resolve) => {
             const updates = []
             if (Object.prototype.hasOwnProperty.call(data, 'notificationsHomeworks')) updates.push(`notifications_homeworks = ${data.notificationsHomeworks}`)
             if (Object.prototype.hasOwnProperty.call(data, 'notificationsMarks')) updates.push(`notifications_marks = ${data.notificationsMarks}`)
             if (Object.prototype.hasOwnProperty.call(data, 'isActive')) updates.push(`is_active = ${data.isActive}`)
-            this.query(`
-                UPDATE users_tokens
-                SET ${updates.join(', ')}
-                WHERE fcm_token = $1;
-            `, token).then(() => {
-                resolve()
-            })
+            UsersTokens.update({
+                last_active_at: new Date()
+            }, {
+                where: {
+                    fcm_token: token
+                }
+            }).then(() => {
+                if (updates.length > 0) {
+                    UsersTokens.update(updates.join(', '), {
+                        where: {
+                            fcm_token: token
+                        }
+                    }).then(() => {
+                        resolve()
+                    })
+                } else {
+                    resolve()
+                }
+            }
+            )
         })
     }
 
-    createOrUpdateToken ({ pronoteUsername, pronoteURL }, token, deviceID) {
+    createOrUpdateToken({ pronoteUsername, pronoteURL }, token, deviceID) {
         return new Promise((resolve) => {
-            this.query(`
-                INSERT INTO users_tokens
-                (pronote_username, pronote_url, fcm_token, is_active, notifications_homeworks, notifications_marks, device_id) VALUES
-                ($1, $2, $3, true, true, true, $4)
-                ON CONFLICT ON CONSTRAINT users_tokens_pkey DO
-                    UPDATE SET is_active = true,
-                    notifications_homeworks = true,
-                    notifications_marks = true;
-            `, pronoteUsername, pronoteURL, token, deviceID).then(() => {
+            UsersTokens.upsert({
+                pronote_url: pronoteURL,
+                pronote_username: pronoteUsername,
+                fcm_token: token,
+                device_id: deviceID,
+                last_active_at: new Date(),
+                last_success_at: new Date(),
+                notifications_homeworks: true,
+                notifications_marks: true,
+                is_active: true
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    createNotification ({ pronoteUsername, pronoteURL }, { type, title, body }) {
+    createNotification({ pronoteUsername, pronoteURL }, { type, title, body }) {
         return new Promise((resolve) => {
-            const id = Math.random().toString(36).substr(2, 9)
-            const createdAt = new Date().toISOString()
-            this.query(`
-                INSERT INTO notifications
-                (notification_id, pronote_username, pronote_url, sent_at, read_at, type, title, body, created_at) VALUES
-                ($1, $2, $3, null, null, $4, $5, $6, $7);
-            `, id, pronoteUsername, pronoteURL, type, title, body, createdAt).then(() => {
-                resolve(id)
-            })
-        })
-    }
-
-    markNotificationSent (id, sentAt) {
-        return new Promise((resolve) => {
-            this.query(`
-                UPDATE notifications
-                SET sent_at = $1
-                WHERE notification_id = $2;
-            `, sentAt.toISOString(), id).then(() => {
+            Notifications.create({
+                pronote_url: pronoteURL,
+                pronote_username: pronoteUsername,
+                type: type,
+                title: title,
+                body: body,
+                created_at: new Date()
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    markNotificationRead (id, readAt) {
+    markNotificationSent(id, sentAt) {
         return new Promise((resolve) => {
-            this.query(`
-                UPDATE notifications
-                SET read_at = $1
-                WHERE notification_id = $2;
-            `, readAt.toISOString(), id).then(() => {
+            Notifications.update({
+                sent_at: sentAt
+            }, {
+                where: {
+                    id: id
+                }
+            }).then(() => {
                 resolve()
-            })
+            }
+            )
         })
     }
 
-    createUserLog ({ pronoteUsername, pronoteURL, fcmToken }, { route, appVersion, date = new Date(), body, jwt }) {
-        return this.query(`
-            INSERT INTO users_logs
-            (pronote_username, pronote_url, fcm_token, route, app_version, date, jwt, req_body) VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8);
-        `, pronoteUsername, pronoteURL, fcmToken, route, appVersion, date.toISOString(), jwt, body)
+    markNotificationRead(id, readAt) {
+        return new Promise((resolve) => {
+            Notifications.update({
+                read_at: readAt
+            }, {
+                where: {
+                    id: id
+                }
+            }).then(() => {
+                resolve()
+            }
+            )
+        })
+    }
+
+    createUserLog({ pronoteUsername, pronoteURL, fcmToken }, { route, appVersion, date = new Date(), body, jwt }) {
+        return UsersLogs.create({
+            pronote_url: pronoteURL,
+            pronote_username: pronoteUsername,
+            fcm_token: fcmToken,
+            route: route,
+            app_version: appVersion,
+            date: date,
+            body: body,
+            jwt: jwt
+        })
     }
 };
 
