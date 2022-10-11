@@ -1,6 +1,7 @@
 const config = require('../config.json')
 const { Users, UsersCaches, UsersTokens, UsersLogs, Notifications } = require('./models');
 const { Sequelize, Op } = require('sequelize');
+
 const formatUser = (row) => ({
     pronoteURL: row.pronote_url,
     pronoteUsername: row.pronote_username,
@@ -22,6 +23,9 @@ const formatFCMToken = (row) => ({
     notificationsHomeworks: row.notifications_homeworks
 })
 
+
+
+
 class DatabaseService {
 
 
@@ -37,11 +41,14 @@ class DatabaseService {
     fetchFCMToken(fcmToken) {
         return new Promise((resolve) => {
             UsersTokens.findOne({
+                raw: true, nest: true,
                 where: {
                     fcm_token: fcmToken
                 }
             }).then((row) => {
-                resolve(formatFCMToken(row))
+                if (row) {
+                    resolve(formatFCMToken(row[0]))
+                }
             }
             )
 
@@ -51,12 +58,15 @@ class DatabaseService {
     fetchUser(pronoteUsername, pronoteURL) {
         return new Promise((resolve) => {
             Users.findOne({
+                raw: true, nest: true,
                 where: {
                     pronote_username: pronoteUsername,
                     pronote_url: pronoteURL
                 }
             }).then((row) => {
-                resolve(formatUser(row))
+                if (row) {
+                    resolve(formatUser(row))
+                }
             })
         })
     }
@@ -77,7 +87,7 @@ class DatabaseService {
 
     fetchUsers() {
         return new Promise((resolve) => {
-            Users.findAll().then((rows) => {
+            Users.findAll({ raw: true, nest: true }).then((rows) => {
                 resolve(rows.map(formatUser))
             }
             )
@@ -86,7 +96,7 @@ class DatabaseService {
 
     fetchUsersCache() {
         return new Promise((resolve) => {
-            UsersCaches.findAll().then((rows) => {
+            UsersCaches.findAll({ raw: true, nest: true }).then((rows) => {
                 resolve(rows.map((row) => ({
                     pronoteURL: row.pronote_url,
                     pronoteUsername: row.pronote_username,
@@ -101,7 +111,7 @@ class DatabaseService {
 
     fetchFCMTokens() {
         return new Promise((resolve) => {
-            UsersTokens.findAll().then((rows) => {
+            UsersTokens.findAll({ raw: true, nest: true }).then((rows) => {
                 resolve(rows.map(formatFCMToken))
             })
         })
@@ -220,7 +230,9 @@ class DatabaseService {
             }).then(() => {
                 resolve()
             }
-            )
+            ).catch((err) => {
+                console.log(err)
+            })
         })
     }
 

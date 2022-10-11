@@ -101,6 +101,7 @@ sequelize.authenticate().then(() => {
 
 */
 
+
 const Users = sequelize.define('users', {
     pronote_url: {
         type: Sequelize.STRING,
