@@ -34,7 +34,7 @@ const firebase = new FirebaseService()
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const synchronize = async (studentName) => {
-    await db.sync()
+    await db.sync({ force: true })
     const users = await database.fetchUsers()
     const usersCaches = await database.fetchUsersCache()
     const usersTokens = await database.fetchFCMTokens()
@@ -363,117 +363,64 @@ app.post('/register', async (req, res) => {
     const body = req.body
 
     if (!body.pronote_url) {
-        return void console.log(body);
-    }
-
-    const userAuth = {
-        pronoteUsername: body.pronote_username,
-        pronotePassword: body.pronote_password,
-        pronoteURL: pronote.parsePronoteURL(body.pronote_url),
-        fcmToken: body.fcm_token
-    }
-
-    if (Object.values(userAuth).some((v) => v === undefined)) {
         return res.status(400).send({
             success: false,
-            message: 'BAD REQUEST. Essayez de mettre à jour l\'application et réessayez !'
+            code: 1,
+            message: 'Missing pronote_url'
         })
     }
+    console.table(body)
 
-    if (body.device_id) userAuth.deviceID = body.device_id
-
-    database.createUserLog(userAuth, {
+    database.createUserLog({
+        pronoteUsername: body.username,
+        pronoteURL: body.pronote_url,
+        fcmToken: body.fcm_token
+    }, {
         route: '/register',
         appVersion: req.headers['app-version'] || 'unknown',
         date: new Date(),
-        body: userAuth
+        body
     })
 
-    const token = jwt.createToken(userAuth)
-
-    const isValidToken = await firebase.verifyToken(userAuth.fcmToken)
-    if (!isValidToken) {
+    const login = await pronote.createSession(body.pronote_url, body.username, body.password)
+    if (!login) {
         return res.status(403).send({
             success: false,
-            message: 'Impossible de valider le token FCM.'
+            code: 1,
+            message: 'Identifiants incorrects'
         })
     }
 
-    if (userAuth.pronoteURL === 'demo') {
-        return res.status(200).send({
-            success: true,
-            full_name: 'Sarah Kelly',
-            student_class: '204',
-            establishment: 'Lycée Gustave Eiffel',
-            notifications_homeworks: true,
-            notifications_marks: true,
-            jwt: token
-        })
-    }
-
-
-    userAuth.pronoteCAS = body.pronote_cas
-
-
-    var session = await pronote.createSession(userAuth).catch((error) => {
-        let message = 'Connexion à Pronote impossible car l\'URL Pronote entrée est invalide. Fermez la pop-up et cliquez sur "Q\'est-ce que "URL Pronote" ou rejoignez notre serveur Discord : https://androz2091.fr/discord pour plus d\'informations. Tous les lycées et collèges étant supportés, nous vous aiderons à trouver la bonne URL.'
-        if (error.code === 3) message = 'Connexion à Pronote réussie mais vos identifiants sont incorrects. Vérifiez et réessayez !'
-        if (error.code === 2) message = 'Le serveur de Notifications pour Pronote est actuellement indisponible. Réessayez dans quelques minutes !'
-        res.status(403).send({
-            success: false,
-            message
-        })
-        return null
-    })
-
-
-    if (!session) return
-
-    const user = await database.fetchUser(userAuth.pronoteUsername, userAuth.pronoteURL)
-
+    const user = await database.fetchUser(body.username, body.pronote_url)
     if (user) {
-        if (user.pronotePassword !== userAuth.pronotePassword) {
-            database.updateUserPassword({
-                pronoteUsername: userAuth.pronoteUsername,
-                pronoteURL: userAuth.pronoteURL,
-                newPassword: userAuth.pronotePassword
-            })
-        }
-        database.invalidateUserPassword(userAuth, false)
-
-        res.status(200).send({
-            success: true,
-            full_name: user.fullName,
-            student_class: user.studentClass,
-            establishment: user.establishment,
-            password_invalidated: user.passwordInvalidated,
-            notifications_homeworks: true,
-            notifications_marks: true,
-            jwt: token
+        await database.updateUser(body.username, body.pronote_url, {
+            fullName: login.fullName,
+            studentClass: login.studentClass,
+            establishment: login.establishment,
+            passwordInvalidated: false
         })
     } else {
-        res.status(200).send({
-            success: true,
-            full_name: session.user.name,
-            student_class: session.user.studentClass.name,
-            establishment: session.user.establishment.name,
-            notifications_homeworks: true,
-            notifications_marks: true,
-            jwt: token
-        })
-        database.createUser({
-            ...userAuth,
-            ...{
-                fullName: session.user.name,
-                studentClass: session.user.studentClass.name,
-                establishment: session.user.establishment.name
-            }
-        })
-        pronote.checkSession(userAuth, {}).then(([notifications, cache]) => {
-            database.updateUserCache(userAuth, cache)
+        await database.createUser(body.username, body.pronote_url, {
+            fullName: login.fullName,
+            studentClass: login.studentClass,
+            establishment: login.establishment,
+            passwordInvalidated: false
         })
     }
-    database.createOrUpdateToken(userAuth, userAuth.fcmToken, userAuth.deviceID)
+
+    let jwt = jwt.generateToken({
+        pronoteUsername: body.username,
+        pronoteURL: body.pronote_url,
+        fcmToken: body.fcm_token
+    })
+    // add FCM token
+    database.createOrUpdateToken(body.fcm_token, body.username, body.pronote_url, body.notifications_homeworks, body.notifications_marks)
+
+    res.status(200).send({
+        success: true,
+        jwt
+    })
+
 
     setTimeout(() => {
         //message de bienvenue 

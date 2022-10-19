@@ -135,19 +135,10 @@ const Users = sequelize.define('users', {
         type: Sequelize.STRING,
         allowNull: true
     },
-    created_at: {
-        type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
-        allowNull: false
-    },
-    updated_at: {
-        type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
-        allowNull: false
-    }
+
 }, {
-    createdAt: false,
-    updatedAt: false
+    createdAt: true,
+    updatedAt: true,
 });
 
 const UsersCaches = sequelize.define('users_caches', {
@@ -307,9 +298,7 @@ const Notifications = sequelize.define('notifications', {
 });
 
 // sync
-sequelize.sync({
-    force: false
-})
+sequelize.sync()
 
 
 module.exports = {

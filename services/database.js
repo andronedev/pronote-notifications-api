@@ -24,23 +24,22 @@ const formatFCMToken = (row) => ({
 })
 
 
-
+// userAuth = { pronoteURL, pronoteUsername, pronotePassword, pronoteCAS }
 
 class DatabaseService {
 
 
 
     query(query, ...parameters) {
-        return new Promise((resolve) => {
-            db.query(query, parameters).then((result) => {
-                resolve(result)
-            })
+        return new Promise(async (resolve) => {
+            let query = await db.query(query, parameters)
+            resolve(query)
         })
     }
 
     fetchFCMToken(fcmToken) {
-        return new Promise((resolve) => {
-            UsersTokens.findOne({
+        return new Promise(async (resolve) => {
+            let query = await UsersTokens.findOne({
                 raw: true, nest: true,
                 where: {
                     fcm_token: fcmToken
@@ -56,76 +55,72 @@ class DatabaseService {
     }
 
     fetchUser(pronoteUsername, pronoteURL) {
-        return new Promise((resolve) => {
-            Users.findOne({
+        return new Promise(async (resolve) => {
+            let query = await Users.findOne({
                 raw: true, nest: true,
                 where: {
                     pronote_username: pronoteUsername,
                     pronote_url: pronoteURL
                 }
-            }).then((row) => {
-                if (row) {
-                    resolve(formatUser(row))
-                }
             })
+            if (query) {
+                resolve(formatUser(query))
+            }
         })
     }
 
     deleteUser({ pronoteUsername, pronoteURL }) {
-        return new Promise((resolve) => {
-            Users.destroy({
+        return new Promise(async (resolve) => {
+            let query = await Users.destroy({
                 where: {
                     pronote_username: pronoteUsername,
                     pronote_url: pronoteURL
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
+
         })
     }
 
     fetchUsers() {
-        return new Promise((resolve) => {
-            Users.findAll({ raw: true, nest: true }).then((rows) => {
-                resolve(rows.map(formatUser))
-            }
-            )
+        return new Promise(async (resolve) => {
+            let query = await Users.findAll({ raw: true, nest: true })
+            resolve(query.map(formatUser))
         })
     }
 
     fetchUsersCache() {
-        return new Promise((resolve) => {
-            UsersCaches.findAll({ raw: true, nest: true }).then((rows) => {
-                resolve(rows.map((row) => ({
-                    pronoteURL: row.pronote_url,
-                    pronoteUsername: row.pronote_username,
-                    homeworksCache: row.homeworks_cache,
-                    marksCache: row.marks_cache,
-                    lastUpdateAt: row.last_update_at
-                })))
-            }
-            )
+        return new Promise(async (resolve) => {
+            let query = await UsersCaches.findAll({ raw: true, nest: true })
+
+            resolve(query.map((row) => ({
+                pronoteURL: row.pronote_url,
+                pronoteUsername: row.pronote_username,
+                homeworksCache: row.homeworks_cache,
+                marksCache: row.marks_cache,
+                lastUpdateAt: row.last_update_at
+            })))
         })
     }
 
     fetchFCMTokens() {
-        return new Promise((resolve) => {
-            UsersTokens.findAll({ raw: true, nest: true }).then((rows) => {
-                resolve(rows.map(formatFCMToken))
-            })
+        return new Promise(async (resolve) => {
+            let query = await UsersTokens.findAll({ raw: true, nest: true })
+            resolve(query.map(formatFCMToken))
         })
     }
 
     fetchUserNotifications(pronoteUsername, pronoteURL) {
-        return new Promise((resolve) => {
-            Notifications.findAll({
+        return new Promise(async (resolve) => {
+            let query = await Notifications.findAll({
                 where: {
                     pronote_username: pronoteUsername,
                     pronote_url: pronoteURL
                 }
-            }).then((rows) => {
-                resolve(rows.map((row) => ({
+            })
+
+                resolve(query.map((row) => ({
                     id: row.id,
                     pronoteURL: row.pronote_url,
                     pronoteUsername: row.pronote_username,
@@ -134,74 +129,71 @@ class DatabaseService {
                     type: row.type,
                     createdAt: row.created_at
                 })))
-            })
+            
         })
     }
 
     markLastActiveAt(token, date) {
-        return new Promise((resolve) => {
-            UsersTokens.update({
+        return new Promise(async (resolve) => {
+            let query = await UsersTokens.update({
                 last_active_at: date
             }, {
                 where: {
                     fcm_token: token
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
         })
     }
 
     markLastSuccessAt(token, date) {
-        return new Promise((resolve) => {
-            UsersTokens.update({
+        return new Promise(async (resolve) => {
+            let query = await UsersTokens.update({
                 last_success_at: date
             }, {
                 where: {
                     fcm_token: token
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
         })
     }
 
     updateUserCache({ pronoteUsername, pronoteURL }, { homeworksCache, marksCache }) {
-        return new Promise((resolve) => {
-            // insert or update
-            UsersCaches.upsert({
-                pronote_url: pronoteURL,
-                pronote_username: pronoteUsername,
-                homeworks_cache: homeworksCache,
-                marks_cache: marksCache,
-                last_update_at: new Date()
-            }).then(() => {
-                resolve()
-            })
+        return new Promise(async (resolve) => {
+            let query = await   // insert or update
+                UsersCaches.upsert({
+                    pronote_url: pronoteURL,
+                    pronote_username: pronoteUsername,
+                    homeworks_cache: homeworksCache,
+                    marks_cache: marksCache,
+                    last_update_at: new Date()
+                })
+            query.save()
+            resolve()
         })
     }
 
     invalidateUserPassword({ pronoteUsername, pronoteURL }, invalidate = true) {
-        return new Promise((resolve) => {
-            Users.update({
+        return new Promise(async (resolve) => {
+            let query = await Users.update({
                 password_invalidated: invalidate
             }, {
                 where: {
                     pronote_username: pronoteUsername,
                     pronote_url: pronoteURL
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
         })
     }
 
     updateUserPassword({ pronoteUsername, pronoteURL, newPassword }) {
-        return new Promise((resolve) => {
-            Users.update({
+        return new Promise(async (resolve) => {
+            let query = await Users.update({
                 pronote_password: newPassword,
                 password_invalidated: false
             }, {
@@ -209,16 +201,16 @@ class DatabaseService {
                     pronote_username: pronoteUsername,
                     pronote_url: pronoteURL
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
+
         })
     }
 
-    createUser({ pronoteUsername, pronotePassword, pronoteURL, pronoteCAS, fullName, studentClass, establishment }) {
-        return new Promise((resolve) => {
-            Users.upsert({
+    createUser({ pronoteURL, pronoteUsername, pronotePassword, pronoteCAS}, { fullName, studentClass, establishment }) {
+        return new Promise(async (resolve) => {
+            let query = await Users.create({
                 pronote_url: pronoteURL,
                 pronote_username: pronoteUsername,
                 pronote_password: pronotePassword,
@@ -227,47 +219,51 @@ class DatabaseService {
                 student_class: studentClass,
                 establishment: establishment,
                 password_invalidated: false
-            }).then(() => {
-                resolve()
-            }
-            ).catch((err) => {
-                console.log(err)
+            },{
+                logging: console.log
             })
+            query.save()
+            resolve()
+
         })
     }
 
     updateToken(token, data) {
-        return new Promise((resolve) => {
+        return new Promise(async (resolve) => {
             const updates = []
             if (Object.prototype.hasOwnProperty.call(data, 'notificationsHomeworks')) updates.push(`notifications_homeworks = ${data.notificationsHomeworks}`)
             if (Object.prototype.hasOwnProperty.call(data, 'notificationsMarks')) updates.push(`notifications_marks = ${data.notificationsMarks}`)
             if (Object.prototype.hasOwnProperty.call(data, 'isActive')) updates.push(`is_active = ${data.isActive}`)
-            UsersTokens.update({
+            let query = await UsersTokens.update({
                 last_active_at: new Date()
             }, {
                 where: {
                     fcm_token: token
                 }
-            }).then(() => {
-                if (updates.length > 0) {
-                    UsersTokens.update(updates.join(', '), {
-                        where: {
-                            fcm_token: token
-                        }
-                    }).then(() => {
-                        resolve()
-                    })
-                } else {
-                    resolve()
-                }
+            })
+            query.save()
+
+            if (updates.length > 0) {
+                let query2 = await UsersTokens.update(updates.join(', '), {
+                    where: {
+                        fcm_token: token
+                    }
+                })
+                query2.save()
+
+
             }
-            )
+            resolve()
+
+
+
+
         })
     }
 
     createOrUpdateToken({ pronoteUsername, pronoteURL }, token, deviceID) {
-        return new Promise((resolve) => {
-            UsersTokens.upsert({
+        return new Promise(async (resolve) => {
+            let query = await UsersTokens.upsert({
                 pronote_url: pronoteURL,
                 pronote_username: pronoteUsername,
                 fcm_token: token,
@@ -277,61 +273,61 @@ class DatabaseService {
                 notifications_homeworks: true,
                 notifications_marks: true,
                 is_active: true
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+
+            query.save()
+            resolve()
+
         })
     }
 
     createNotification({ pronoteUsername, pronoteURL }, { type, title, body }) {
-        return new Promise((resolve) => {
-            Notifications.create({
+        return new Promise(async (resolve) => {
+            let query = await Notifications.create({
                 pronote_url: pronoteURL,
                 pronote_username: pronoteUsername,
                 type: type,
                 title: title,
                 body: body,
                 created_at: new Date()
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve(query)
+
         })
     }
 
     markNotificationSent(id, sentAt) {
-        return new Promise((resolve) => {
-            Notifications.update({
+        return new Promise(async (resolve) => {
+            let query = await Notifications.update({
                 sent_at: sentAt
             }, {
                 where: {
                     id: id
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
         })
+
     }
 
     markNotificationRead(id, readAt) {
-        return new Promise((resolve) => {
-            Notifications.update({
+        return new Promise(async (resolve) => {
+            let query = await Notifications.update({
                 read_at: readAt
             }, {
                 where: {
                     id: id
                 }
-            }).then(() => {
-                resolve()
-            }
-            )
+            })
+            query.save()
+            resolve()
         })
     }
 
-    createUserLog({ pronoteUsername, pronoteURL, fcmToken }, { route, appVersion, date = new Date(), body, jwt }) {
-        return UsersLogs.create({
+    async createUserLog({ pronoteUsername, pronoteURL, fcmToken }, { route, appVersion, date = new Date(), body, jwt }) {
+        let query = await UsersLogs.create({
             pronote_url: pronoteURL,
             pronote_username: pronoteUsername,
             fcm_token: fcmToken,
@@ -341,6 +337,8 @@ class DatabaseService {
             body: body,
             jwt: jwt
         })
+        query.save()
+        return query
     }
 };
 
