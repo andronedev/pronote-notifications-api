@@ -382,6 +382,10 @@ app.get("/firebase-messaging-sw.js", (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'firebase-messaging-sw.js'))
 })
 
+app.get("icon.ico", (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'icon.ico'))
+})
+
 
 app.get('/', (req, res) => res.send({
     success: true, message: 'Welcome to Notifications pour Pronote API'
