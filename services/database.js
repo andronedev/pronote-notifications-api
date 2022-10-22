@@ -45,8 +45,10 @@ class DatabaseService {
                     fcm_token: fcmToken
                 }
             }).then((row) => {
-                if (row) {
+                if (row.length > 0) {
                     resolve(formatFCMToken(row[0]))
+                }else {
+                    resolve(false)
                 }
             }
             )
@@ -65,6 +67,8 @@ class DatabaseService {
             })
             if (query) {
                 resolve(formatUser(query))
+            }else {
+                resolve(false)
             }
         })
     }
@@ -171,7 +175,6 @@ class DatabaseService {
                     marks_cache: marksCache,
                     last_update_at: new Date()
                 })
-            query.save()
             resolve()
         })
     }
@@ -227,46 +230,44 @@ class DatabaseService {
 
         })
     }
-
-    updateToken(token, data) {
+    updateUser({ pronoteURL, pronoteUsername, pronotePassword, pronoteCAS}, { fullName, studentClass, establishment }) {
         return new Promise(async (resolve) => {
-            const updates = []
-            if (Object.prototype.hasOwnProperty.call(data, 'notificationsHomeworks')) updates.push(`notifications_homeworks = ${data.notificationsHomeworks}`)
-            if (Object.prototype.hasOwnProperty.call(data, 'notificationsMarks')) updates.push(`notifications_marks = ${data.notificationsMarks}`)
-            if (Object.prototype.hasOwnProperty.call(data, 'isActive')) updates.push(`is_active = ${data.isActive}`)
-            let query = await UsersTokens.update({
-                last_active_at: new Date()
-            }, {
+            let query = await Users.update({
+                pronote_url: pronoteURL,
+                pronote_username: pronoteUsername,
+                pronote_password: pronotePassword,
+                pronote_cas: pronoteCAS,
+                full_name: fullName,
+                student_class: studentClass,
+                establishment: establishment,
+                password_invalidated: false
+            },{
                 where: {
-                    fcm_token: token
+                    pronote_url: pronoteURL,
+                    pronote_username: pronoteUsername
                 }
             })
-            query.save()
-
-            if (updates.length > 0) {
-                let query2 = await UsersTokens.update(updates.join(', '), {
-                    where: {
-                        fcm_token: token
-                    }
-                })
-                query2.save()
-
-
-            }
             resolve()
 
+        })
+    }
 
-
-
+    deleteFCMToken(token) {
+        return new Promise(async (resolve) => {
+            let query = await UsersTokens.destroy({
+                where: {
+                    fcm_token:token
+                }
+            })
         })
     }
 
     createOrUpdateToken({ pronoteUsername, pronoteURL }, token, deviceID) {
         return new Promise(async (resolve) => {
             let query = await UsersTokens.upsert({
+                fcm_token: token,
                 pronote_url: pronoteURL,
                 pronote_username: pronoteUsername,
-                fcm_token: token,
                 device_id: deviceID,
                 last_active_at: new Date(),
                 last_success_at: new Date(),
@@ -274,8 +275,6 @@ class DatabaseService {
                 notifications_marks: true,
                 is_active: true
             })
-
-            query.save()
             resolve()
 
         })
@@ -306,7 +305,6 @@ class DatabaseService {
                     id: id
                 }
             })
-            query.save()
             resolve()
         })
 
@@ -321,7 +319,6 @@ class DatabaseService {
                     id: id
                 }
             })
-            query.save()
             resolve()
         })
     }

@@ -34,24 +34,24 @@ const firebase = new FirebaseService()
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const synchronize = async (studentName) => {
-    await db.sync({ force: true })
+    await db.sync()
     const users = await database.fetchUsers()
     const usersCaches = await database.fetchUsersCache()
     const usersTokens = await database.fetchFCMTokens()
 
-    const usersSync = users.filter((user) => !user.passwordInvalidated && (studentName ? user.pronoteUsername === studentName : true))
+    const usersSync = users.filter((user) => !user.password_invalidated && (studentName ? user.pronote_username === studentName : true))
     for (const [index, userAuth] of usersSync.entries()) {
         await sleep(500)
         const oldCache = usersCaches.find((cache) => {
-            return cache.pronoteUsername === userAuth.pronoteUsername && cache.pronoteURL === userAuth.pronoteURL
+            return cache.pronote_username === userAuth.pronote_username && cache.pronote_url === userAuth.pronote_url
         })
         pronote.checkSession(userAuth, oldCache, index).then(([notifications, newCache]) => {
             if (notifications.length > 0) {
                 const tokens = usersTokens.filter((token) => {
-                    return token.pronoteUsername === userAuth.pronoteUsername && token.pronoteURL === userAuth.pronoteURL && token.isActive
+                    return token.pronote_username === userAuth.pronote_username && token.pronote_url === userAuth.pronote_url && token.isActive
                 })
-                const homeworksTokens = tokens.filter((token) => token.notificationsHomeworks).map((token) => token.fcmToken)
-                const marksTokens = tokens.filter((token) => token.notificationsMarks).map((token) => token.fcmToken)
+                const homeworksTokens = tokens.filter((token) => token.notifications_homeworks).map((token) => token.fcm_token)
+                const marksTokens = tokens.filter((token) => token.notifications_marks).map((token) => token.fcm_token)
                 notifications.forEach((notificationData) => {
                     database.createNotification(userAuth, notificationData).then((notificationDBID) => {
                         const notification = {
@@ -92,14 +92,14 @@ const synchronize = async (studentName) => {
 
 const checkInvalidated = async () => {
     const users = await database.fetchUsers()
-    const usersInvalidated = users.filter((u) => u.passwordInvalidated)
+    const usersInvalidated = users.filter((u) => u.password_invalidated)
     const failed = []
     usersInvalidated.forEach((user) => {
-        if (failed.filter((e) => e === user.pronoteURL).length < 1) {
+        if (failed.filter((e) => e === user.pronote_url).length < 1) {
             pronote.createSession(user).then(() => {
                 database.invalidateUserPassword(user, false)
             }).catch(() => {
-                failed.push(user.pronoteURL)
+                failed.push(user.pronote_url)
             })
         }
     })
@@ -113,10 +113,10 @@ synchronize()
 
 setInterval(function () {
     synchronize()
-}, 30 * 60 * 1000)
+}, 30 * 60 * 1000) // 30 minutes
 setInterval(() => {
     checkInvalidated()
-}, 24 * 60 * 60 * 1000)
+}, 24 * 60 * 60 * 1000) // 24 hours
 
 
 // set cors headers
@@ -146,23 +146,31 @@ app.post('/logout', async (req, res) => {
         jwt: token
     })
 
-    if (payload.pronoteURL === 'demo') {
-        return res.status(200).send({
-            success: true
-        })
-    }
+
+
 
     const existingToken = await database.fetchFCMToken(payload.fcmToken)
     if (!existingToken) {
+        // delete jwt token
+        jwt.deleteToken(token)
+
+        return res.status(200).send({
+            success: true,
+            code: 0,
+            message: 'Token deleted'
+        })
+        
+    }
+    
+    await database.deleteFCMToken(payload.fcmToken).catch((e) => {
+        console.error(e)
         return res.status(500).send({
             success: false,
-            code: 4,
-            message: 'Unknown FCM token'
+            code: 5,
+            message: 'Internal server error'
         })
-    }
-    database.updateToken(payload.fcmToken, {
-        isActive: false
     })
+
 
     return res.status(200).send({
         success: true
@@ -170,48 +178,7 @@ app.post('/logout', async (req, res) => {
 
 })
 
-app.post('/settings', async (req, res) => {
-    const token = req.headers.authorization
-    const payload = jwt.verifyToken(token)
-    if (!token || !payload) {
-        return res.status(403).send({
-            success: false,
-            code: 2,
-            message: 'Unauthorized'
-        })
-    }
-    const data = req.body
-    database.createUserLog(payload, {
-        route: '/settings',
-        appVersion: req.headers['app-version'] || 'unknown',
-        date: new Date(),
-        body: data,
-        jwt: token
-    })
 
-    if (payload.pronoteURL === 'demo') {
-        return res.status(200).send({
-            success: true
-        })
-    }
-
-    const existingToken = await database.fetchFCMToken(payload.fcmToken)
-    if (!existingToken) {
-        return res.status(500).send({
-            success: false,
-            code: 4,
-            message: 'Unknown FCM token'
-        })
-    }
-
-    database.updateToken(payload.fcmToken, {
-        notificationsHomeworks: data.notifications_homeworks === 'true',
-        notificationsMarks: data.notifications_marks === 'true'
-    })
-    return res.status(200).send({
-        success: true
-    })
-})
 
 app.get('/notifications', async (req, res) => {
     const token = req.headers.authorization
@@ -231,23 +198,7 @@ app.get('/notifications', async (req, res) => {
         jwt: token
     })
 
-    if (payload.pronoteURL === 'demo') {
-        const minDate = new Date(2012, 0, 1)
-        const randomDate = () => new Date(minDate.getTime() + Math.random() * (Date.now() - minDate.getTime()))
-        return res.status(200).send({
-            success: true,
-            notifications: [
-                {
-                    created_at: randomDate(),
-                    read_at: randomDate(),
-                    sent_at: randomDate(),
-                    title: 'Nouvelle note en HISTOIRE-GEOGRAPHIE',
-                    body: 'Note: 19/20\nMoyenne de la classe: 11.91/20',
-                    type: 'mark'
-                }
-            ]
-        })
-    }
+
 
     const user = await database.fetchUser(payload.pronoteUsername, payload.pronoteURL)
     if (!user) {
@@ -280,7 +231,7 @@ app.get('/notifications', async (req, res) => {
 })
 
 app.get('/login', async (req, res) => {
-    const token = req.headers.authorization
+    const token = req.params.token
     const payload = jwt.verifyToken(token)
     if (!token || !payload) {
         return res.status(403).send({
@@ -297,16 +248,6 @@ app.get('/login', async (req, res) => {
         jwt: token
     })
 
-    if (payload.pronoteURL === 'demo') {
-        return res.status(200).send({
-            success: true,
-            full_name: 'Sarah Kelly',
-            student_class: '204',
-            establishment: 'Lycée Gustave Eiffel',
-            notifications_homeworks: true,
-            notifications_marks: true
-        })
-    }
 
     const user = await database.fetchUser(payload.pronoteUsername, payload.pronoteURL)
     if (!user) {
@@ -337,27 +278,6 @@ app.get('/login', async (req, res) => {
     }
 })
 
-app.get('/establishments', async (req, res) => {
-    if (!req.query.latitude || !req.query.longitude) return
-
-    database.createUserLog({
-        pronoteUsername: 'unknown',
-        pronoteURL: 'unknown',
-        fcmToken: 'unknown'
-    }, {
-        route: '/establishments',
-        appVersion: req.headers['app-version'] || 'unknown',
-        date: new Date(),
-        body: { latitude: req.query.latitude, longitude: req.query.longitude }
-    })
-
-    const establishments = (await pronote.getEstablishments(req.query.latitude, req.query.longitude)) || []
-
-    return res.status(200).send({
-        success: true,
-        establishments
-    })
-})
 
 app.post('/register', async (req, res) => {
     const body = req.body
@@ -372,7 +292,7 @@ app.post('/register', async (req, res) => {
     console.table(body)
 
     database.createUserLog({
-        pronoteUsername: body.username,
+        pronoteUsername: body.pronote_username,
         pronoteURL: body.pronote_url,
         fcmToken: body.fcm_token
     }, {
@@ -381,8 +301,14 @@ app.post('/register', async (req, res) => {
         date: new Date(),
         body
     })
-
-    const login = await pronote.createSession(body.pronote_url, body.username, body.password)
+    let auth = {
+        pronoteUsername: body.pronote_username,
+        pronotePassword: body.pronote_password,
+        pronoteURL: body.pronote_url,
+        pronoteCAS: body.pronote_cas
+    }
+    const login = await pronote.createSession(auth)
+    console.log(login)
     if (!login) {
         return res.status(403).send({
             success: false,
@@ -391,45 +317,50 @@ app.post('/register', async (req, res) => {
         })
     }
 
-    const user = await database.fetchUser(body.username, body.pronote_url)
+    const user = await database.fetchUser(body.pronote_username, body.pronote_url)
+    console.log(user)
     if (user) {
-        await database.updateUser(body.username, body.pronote_url, {
-            fullName: login.fullName,
-            studentClass: login.studentClass,
-            establishment: login.establishment,
+        await database.updateUser(auth, {
+            fullName: login.user.name,
+            studentClass: JSON.stringify(login.user.studentClass),
+            establishment: JSON.stringify(login.user.establishment),
             passwordInvalidated: false
         })
     } else {
-        await database.createUser(body.username, body.pronote_url, {
-            fullName: login.fullName,
-            studentClass: login.studentClass,
-            establishment: login.establishment,
-            passwordInvalidated: false
+        await database.createUser(auth, {
+            fullName: login.user.name,
+            studentClass: JSON.stringify(login.user.studentClass),
+            establishment: JSON.stringify(login.user.establishment)
         })
     }
-
-    let jwt = jwt.generateToken({
-        pronoteUsername: body.username,
+    console.log('user created')
+    console.log(body.fcm_token)
+    let userAuth = await jwt.createToken({
+        pronoteUsername: body.pronote_username,
         pronoteURL: body.pronote_url,
         fcmToken: body.fcm_token
     })
     // add FCM token
-    database.createOrUpdateToken(body.fcm_token, body.username, body.pronote_url, body.notifications_homeworks, body.notifications_marks)
+    database.createOrUpdateToken(auth,
+        body.fcm_token,
+        body.device_id || 'unknown',
+    )
+
 
     res.status(200).send({
         success: true,
-        jwt
+        jwt: userAuth
     })
 
 
     setTimeout(() => {
         //message de bienvenue 
-        if (!userAuth.fcmToken) return console.log("no token")
+        if (!body.fcm_token) return console.log("no token")
         //sendNotification (notificationData, notificationType, tokens) {
         firebase.sendNotification({
             title: 'Bienvenue sur Notifications pour Pronote !',
             body: 'Vous pouvez désormais recevoir des notifications pour vos devoirs et vos notes !',
-        }, 'welcome', [userAuth.fcmToken])
+        }, 'welcome', [body.fcm_token])
     }, 10000)
 
 

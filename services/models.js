@@ -115,6 +115,11 @@ const Users = sequelize.define('users', {
         type: Sequelize.STRING,
         allowNull: false
     },
+    password_invalidated: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+    },
     pronote_cas: {
         type: Sequelize.STRING,
         allowNull: true

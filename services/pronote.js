@@ -23,10 +23,8 @@ class PronoteService {
         return newURL
     }
 
-    async resolveCas ({ pronoteUsername, pronotePassword, pronoteURL }) {
-        return {
-            cas: "ac-toulouse"
-        }
+    async resolveCas ({ pronoteUsername, pronotePassword, pronoteURL }) { // currently not robust
+   
         console.log('Resolving CAS ' + pronoteURL)
         if (this.casCache.has(pronoteURL) && this.casCache.get(pronoteURL) !== undefined) {
             return {
@@ -79,8 +77,8 @@ class PronoteService {
             this.createSession(userAuth, fetchID).then((session) => {
                 // Vérification des devoirs
                 session.homeworks(new Date(Date.now()), session.params.lastDay).then((homeworks) => {
-                    if (oldCache.homeworksCache) {
-                        const newHomeworks = homeworks.filter((work) => !(oldCache.homeworksCache.some((cacheWork) => cacheWork.description === work.description)))
+                    if (oldCache.homeworks_cache) {
+                        const newHomeworks = homeworks.filter((work) => !(oldCache.homeworks_cache.some((cacheWork) => cacheWork.description === work.description)))
                         if (newHomeworks.length > 0 && newHomeworks.length <= 3) {
                             newHomeworks.forEach((work) => notifications.push({
                                 type: 'homework',
@@ -94,17 +92,17 @@ class PronoteService {
                     newCache = {
                         ...newCache,
                         ...{
-                            homeworksCache: homeworks
+                            homeworks_cache: homeworks
                         }
                     }
 
                     session.marks('trimester').then((marks) => {
                         if (!marks) {
                             marks = { subjects: [], empty: true }
-                        } else if (oldCache.marksCache && !oldCache.marksCache.empty) {
+                        } else if (oldCache.marks_cache && !oldCache.marks_cache.empty) {
                             const marksNotifications = []
                             marks.subjects.forEach((subject) => {
-                                const cachedSubject = oldCache.marksCache.subjects.find((sub) => sub.name === subject.name)
+                                const cachedSubject = oldCache.marks_cache.subjects.find((sub) => sub.name === subject.name)
                                 if (cachedSubject) {
                                     const newMarks = subject.marks.filter((mark) => !(cachedSubject.marks.some((cacheMark) => cacheMark.id === mark.id)))
                                     newMarks.forEach((mark) => marksNotifications.push({ subject, mark }))
@@ -127,7 +125,7 @@ class PronoteService {
                         newCache = {
                             ...newCache,
                             ...{
-                                marksCache: marks
+                                marks_cache: marks
                             }
                         }
 
