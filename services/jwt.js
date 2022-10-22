@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken')
 const config = require('../config.json')
+
 const fs = require('fs')
+
+
 function addToBlacklist(token) {
     // ./blacklist.json
     if (!fs.existsSync('./blacklist.json')) {
@@ -29,8 +32,8 @@ class JWTService {
         return jwt.sign(payload, config.jwtKey)
     }
 
-    static verifyToken(token = '') {
-        if (isBlacklisted(token)) { return null }
+    static verifyToken(token) {
+        if (isBlacklisted(token) === true) { return null }
         try {
             return jwt.verify(token, config.jwtKey)
         } catch {

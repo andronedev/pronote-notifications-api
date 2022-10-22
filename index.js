@@ -159,7 +159,7 @@ app.post('/logout', async (req, res) => {
             code: 0,
             message: 'Token deleted'
         })
-        
+
     }
     
     await database.deleteFCMToken(payload.fcmToken).catch((e) => {
@@ -231,13 +231,14 @@ app.get('/notifications', async (req, res) => {
 })
 
 app.get('/login', async (req, res) => {
-    const token = req.params.token
+    const token = req.query.token
     const payload = jwt.verifyToken(token)
     if (!token || !payload) {
         return res.status(403).send({
             success: false,
             code: 2,
             message: 'Unauthorized'
+            
         })
     }
 
@@ -262,7 +263,8 @@ app.get('/login', async (req, res) => {
             return res.status(500).send({
                 success: false,
                 code: 4,
-                message: 'Unknown FCM token'
+                message: 'Unknown FCM token',
+                ...payload
             })
         }
 
@@ -335,7 +337,7 @@ app.post('/register', async (req, res) => {
     }
     console.log('user created')
     console.log(body.fcm_token)
-    let userAuth = await jwt.createToken({
+    let userAuth = jwt.createToken({
         pronoteUsername: body.pronote_username,
         pronoteURL: body.pronote_url,
         fcmToken: body.fcm_token
