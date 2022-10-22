@@ -45,8 +45,8 @@ class DatabaseService {
                     fcm_token: fcmToken
                 }
             }).then((row) => {
-                if (row.length > 0) {
-                    resolve(formatFCMToken(row[0]))
+                if (row) {
+                    resolve(formatFCMToken(row))
                 }else {
                     resolve(false)
                 }
