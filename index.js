@@ -363,7 +363,7 @@ app.post('/register', async (req, res) => {
             title: 'Bienvenue sur Notifications pour Pronote !',
             body: 'Vous pouvez désormais recevoir des notifications pour vos devoirs et vos notes !',
         }, 'welcome', [body.fcm_token])
-    }, 10000)
+    }, 5000)
 
 
 })
@@ -382,8 +382,8 @@ app.get("/firebase-messaging-sw.js", (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'firebase-messaging-sw.js'))
 })
 
-app.get("icon.ico", (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'public', 'icon.ico'))
+app.get("icon.webp", (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'icon.webp'))
 })
 
 
